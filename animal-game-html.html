@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal Sounds Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fall {
+            to {
+                transform: translateY(110vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+        @keyframes ping {
+            75%, 100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(-25%);
+                animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+            }
+            50% {
+                transform: translateY(0);
+                animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+            }
+        }
+        .animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        .animate-bounce { animation: bounce 1s infinite; }
+        .confetti-piece {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        const animals = [
+            { name: 'Cat', emoji: '🐱', sound: 'Meow!', color: 'bg-orange-100' },
+            { name: 'Dog', emoji: '🐶', sound: 'Woof!', color: 'bg-brown-100' },
+            { name: 'Bird', emoji: '🐦', sound: 'Tweet!', color: 'bg-blue-100' },
+            { name: 'Cow', emoji: '🐮', sound: 'Moo!', color: 'bg-pink-100' },
+            { name: 'Pig', emoji: '🐷', sound: 'Oink!', color: 'bg-pink-200' },
+            { name: 'Lion', emoji: '🦁', sound: 'Roar!', color: 'bg-yellow-100' },
+            { name: 'Frog', emoji: '🐸', sound: 'Ribbit!', color: 'bg-green-100' },
+            { name: 'Sheep', emoji: '🐑', sound: 'Baa!', color: 'bg-gray-100' },
+            { name: 'Duck', emoji: '🦆', sound: 'Quack!', color: 'bg-yellow-200' },
+            { name: 'Monkey', emoji: '🐵', sound: 'Ooh ooh!', color: 'bg-amber-100' }
+        ];
+
+        let currentAnimal = null;
+        let options = [];
+        let score = 0;
+        let turnCount = 0;
+        let showFeedback = false;
+        let isCorrect = false;
+        let gameStarted = false;
+        let gameOver = false;
+
+        const soundMap = {
+            'Cat': 'meow meow',
+            'Dog': 'woof woof',
+            'Bird': 'tweet tweet',
+            'Cow': 'moo',
+            'Pig': 'oink oink',
+            'Lion': 'roar',
+            'Frog': 'ribbit ribbit',
+            'Sheep': 'baa baa',
+            'Duck': 'quack quack',
+            'Monkey': 'ooh ooh ah ah'
+        };
+
+        function playAnimalSound(animalName) {
+            const utterance = new SpeechSynthesisUtterance();
+            utterance.text = soundMap[animalName] || animalName;
+            utterance.rate = 1.2;
+            utterance.pitch = 1.5;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function playSound(correct) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            if (correct) {
+                oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } else {
+                oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(300, audioContext.currentTime + 0.15);
+                oscillator.frequency.setValueAtTime(250, audioContext.currentTime + 0.25);
+                gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.4);
+            }
+        }
+
+        function createConfetti() {
+            const colors = ['bg-red-500', 'bg-blue-500', 'bg-yellow-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
+            const container = document.getElementById('confetti-container');
+            
+            for (let i = 0; i < 50; i++) {
+                const piece = document.createElement('div');
+                piece.className = `confetti-piece ${colors[Math.floor(Math.random() * colors.length)]}`;
+                piece.style.left = Math.random() * 100 + '%';
+                piece.style.top = '-10%';
+                piece.style.animation = `fall ${2 + Math.random()}s ease-in ${Math.random() * 0.3}s forwards`;
+                piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+                container.appendChild(piece);
+                
+                setTimeout(() => piece.remove(), 3000);
+            }
+        }
+
+        function generateNewQuestion() {
+            const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+            const correctLetter = randomAnimal.name[0].toUpperCase();
+            
+            const allLetters = animals.map(a => a.name[0].toUpperCase());
+            const uniqueLetters = [...new Set(allLetters)].filter(l => l !== correctLetter);
+            
+            const wrongLetters = [];
+            while (wrongLetters.length < 2) {
+                const randomLetter = uniqueLetters[Math.floor(Math.random() * uniqueLetters.length)];
+                if (!wrongLetters.includes(randomLetter)) {
+                    wrongLetters.push(randomLetter);
+                }
+            }
+            
+            const allOptions = [correctLetter, ...wrongLetters].sort(() => Math.random() - 0.5);
+            
+            currentAnimal = randomAnimal;
+            options = allOptions;
+            showFeedback = false;
+            
+            render();
+            
+            setTimeout(() => {
+                playAnimalSound(randomAnimal.name);
+            }, 300);
+        }
+
+        function checkAnswer(selectedLetter) {
+            if (showFeedback) return;
+            
+            const correct = selectedLetter === currentAnimal.name[0].toUpperCase();
+            isCorrect = correct;
+            showFeedback = true;
+            playSound(correct);
+            
+            if (correct) {
+                score++;
+                createConfetti();
+                setTimeout(() => {
+                    playAnimalSound(currentAnimal.name);
+                }, 500);
+            }
+            
+            render();
+            
+            setTimeout(() => {
+                turnCount++;
+                
+                if (turnCount >= 7) {
+                    gameOver = true;
+                    render();
+                } else {
+                    generateNewQuestion();
+                }
+            }, 2000);
+        }
+
+        function startGame() {
+            gameStarted = true;
+            score = 0;
+            turnCount = 0;
+            gameOver = false;
+            generateNewQuestion();
+        }
+
+        function restartGame() {
+            gameStarted = false;
+            score = 0;
+            turnCount = 0;
+            gameOver = false;
+            render();
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (!gameStarted) {
+                app.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-b from-sky-200 to-green-200 p-8 flex flex-col items-center justify-center">
+                        <div class="bg-white rounded-3xl shadow-2xl p-12 max-w-2xl w-full text-center">
+                            <div class="text-8xl mb-6">🐾</div>
+                            <h1 class="text-6xl font-bold text-purple-600 mb-4">Animal Sounds Game!</h1>
+                            <p class="text-3xl text-gray-700 mb-8">Match the animals with their starting letters!</p>
+                            <div class="flex justify-center gap-6 mb-8 text-6xl">
+                                <span>🐱</span><span>🐶</span><span>🐮</span><span>🦁</span><span>🐸</span>
+                            </div>
+                            <button onclick="startGame()" class="bg-gradient-to-r from-green-500 to-blue-500 text-white text-4xl font-bold px-16 py-8 rounded-full hover:scale-105 active:scale-95 transition-transform shadow-lg">
+                                Start Game! 🎮
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (gameOver) {
+                const getMessage = () => {
+                    if (score === 7) return "🌟 Perfect score! You're amazing! 🌟";
+                    if (score >= 5) return "🎈 Awesome work! 🎈";
+                    if (score >= 3) return "👏 Good job! Keep practicing! 👏";
+                    return "😊 Nice try! Let's play again! 😊";
+                };
+                
+                app.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-b from-purple-200 to-pink-200 p-8 flex flex-col items-center justify-center">
+                        <div class="bg-white rounded-3xl shadow-2xl p-12 max-w-2xl w-full text-center">
+                            <div class="text-8xl mb-6">🎉</div>
+                            <h1 class="text-5xl font-bold text-purple-600 mb-4">Great Job!</h1>
+                            <div class="text-6xl font-bold text-gray-800 mb-8">You got ${score} out of 7! ⭐</div>
+                            <div class="text-3xl mb-8">${getMessage()}</div>
+                            <button onclick="restartGame()" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-3xl font-bold px-12 py-6 rounded-full hover:scale-105 active:scale-95 transition-transform shadow-lg">
+                                Play Again! 🔄
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const optionsHTML = options.map(letter => {
+                let btnClass = 'bg-blue-500 text-white hover:bg-blue-600 active:scale-95';
+                if (showFeedback && letter === currentAnimal.name[0].toUpperCase()) {
+                    btnClass = 'bg-green-500 text-white scale-110';
+                } else if (showFeedback) {
+                    btnClass = 'bg-gray-300 text-gray-500';
+                }
+                
+                return `
+                    <button onclick="checkAnswer('${letter}')" ${showFeedback ? 'disabled' : ''} 
+                        class="${btnClass} text-6xl font-bold py-8 rounded-2xl transition-all transform hover:scale-105">
+                        ${letter}
+                    </button>
+                `;
+            }).join('');
+            
+            app.innerHTML = `
+                <div class="min-h-screen bg-gradient-to-b from-sky-200 to-green-200 p-8 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div id="confetti-container"></div>
+                    
+                    <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
+                        <div class="text-center mb-6 flex justify-between items-center">
+                            <div class="inline-block bg-purple-500 text-white px-6 py-2 rounded-full text-2xl font-bold">
+                                Score: ${score} ⭐
+                            </div>
+                            <div class="inline-block bg-blue-500 text-white px-6 py-2 rounded-full text-2xl font-bold">
+                                Round: ${turnCount + 1} / 7
+                            </div>
+                        </div>
+
+                        <div class="${currentAnimal.color} rounded-2xl p-8 mb-8 text-center transition-all ${showFeedback && isCorrect ? 'scale-110' : ''}">
+                            <div class="text-9xl mb-4 animate-bounce">${currentAnimal.emoji}</div>
+                            <button onclick="playAnimalSound('${currentAnimal.name}')" 
+                                class="flex items-center justify-center gap-2 text-3xl font-bold text-gray-700 bg-white px-6 py-3 rounded-full hover:bg-gray-100 active:scale-95 transition-transform mx-auto">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-500">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                                </svg>
+                                <span>${currentAnimal.sound}</span>
+                            </button>
+                        </div>
+
+                        <div class="text-center mb-6">
+                            <h2 class="text-3xl font-bold text-gray-800 mb-2">
+                                What letter does ${currentAnimal.name} start with?
+                            </h2>
+                            <p class="text-xl text-gray-600">Press the letter on your keyboard!</p>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            ${optionsHTML}
+                        </div>
+
+                        ${showFeedback ? `
+                            <div class="text-center text-4xl font-bold py-4 rounded-xl ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">
+                                ${isCorrect ? '🎉 Great job! 🎉' : '🤔 Oops! Try the next one! 🤔'}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (gameStarted && !gameOver && !showFeedback) {
+                const key = e.key.toUpperCase();
+                if (options.includes(key)) {
+                    checkAnswer(key);
+                }
+            }
+        });
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
