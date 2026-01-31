@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Balloon Letter Game</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const BalloonAlphabetGame = () => {
+      const [currentLetter, setCurrentLetter] = useState('A');
+      const [showConfetti, setShowConfetti] = useState(false);
+      const [score, setScore] = useState(0);
+      const [turn, setTurn] = useState(1);
+      const [gameOver, setGameOver] = useState(false);
+      const [shake, setShake] = useState(false);
+      const audioContextRef = useRef(null);
+
+      const colors = ['#FF6B9D', '#C44569', '#FFA07A', '#98D8C8', '#6BCF7F', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9'];
+
+      useEffect(() => {
+        const initAudio = () => {
+          if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+          }
+        };
+        window.addEventListener('keydown', initAudio, { once: true });
+        return () => window.removeEventListener('keydown', initAudio);
+      }, []);
+
+      const getRandomLetter = () => {
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        let newLetter;
+        do {
+          newLetter = letters[Math.floor(Math.random() * letters.length)];
+        } while (newLetter === currentLetter);
+        return newLetter;
+      };
+
+      const playSound = (type) => {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const audioContext = audioContextRef.current;
+        const now = audioContext.currentTime;
+        
+        if (type === 'correct') {
+          const notes = [523.25, 659.25, 783.99];
+          
+          notes.forEach((freq, i) => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(freq, now + i * 0.12);
+            
+            gainNode.gain.setValueAtTime(0, now + i * 0.12);
+            gainNode.gain.linearRampToValueAtTime(0.25, now + i * 0.12 + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+            
+            oscillator.start(now + i * 0.12);
+            oscillator.stop(now + i * 0.12 + 0.4);
+          });
+          
+          const sparkle = audioContext.createOscillator();
+          const sparkleGain = audioContext.createGain();
+          sparkle.connect(sparkleGain);
+          sparkleGain.connect(audioContext.destination);
+          sparkle.type = 'sine';
+          sparkle.frequency.setValueAtTime(1046.5, now + 0.4);
+          sparkleGain.gain.setValueAtTime(0.15, now + 0.4);
+          sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+          sparkle.start(now + 0.4);
+          sparkle.stop(now + 0.85);
+          
+        } else {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(350, now);
+          oscillator.frequency.exponentialRampToValueAtTime(250, now + 0.25);
+          gainNode.gain.setValueAtTime(0.2, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          
+          oscillator.start(now);
+          oscillator.stop(now + 0.35);
+        }
+      };
+
+      const speakLetter = (letter) => {
+        if ('speechSynthesis' in window) {
+          speechSynthesis.cancel();
+          
+          const letterNames = {
+            'A': 'ay', 'B': 'bee', 'C': 'see', 'D': 'dee', 'E': 'ee', 'F': 'eff', 'G': 'jee',
+            'H': 'aych', 'I': 'eye', 'J': 'jay', 'K': 'kay', 'L': 'ell', 'M': 'emm', 'N': 'enn',
+            'O': 'oh', 'P': 'pee', 'Q': 'kyoo', 'R': 'arr', 'S': 'ess', 'T': 'tee', 'U': 'yoo',
+            'V': 'vee', 'W': 'double yoo', 'X': 'ecks', 'Y': 'why', 'Z': 'zed'
+          };
+          
+          const utterance = new SpeechSynthesisUtterance(letterNames[letter]);
+          utterance.rate = 0.7;
+          utterance.pitch = 1.2;
+          utterance.lang = 'en-GB';
+          utterance.volume = 1;
+          
+          setTimeout(() => {
+            speechSynthesis.speak(utterance);
+          }, 300);
+        }
+      };
+
+      const handleKeyPress = (e) => {
+        if (gameOver) return;
+        
+        const pressedKey = e.key.toUpperCase();
+        if (pressedKey >= 'A' && pressedKey <= 'Z') {
+          if (pressedKey === currentLetter) {
+            playSound('correct');
+            setShowConfetti(true);
+            setScore(score + 1);
+            speakLetter(currentLetter);
+            
+            setTimeout(() => {
+              setShowConfetti(false);
+              if (turn >= 7) {
+                setGameOver(true);
+              } else {
+                setTurn(turn + 1);
+                setCurrentLetter(getRandomLetter());
+              }
+            }, 2500);
+          } else {
+            playSound('incorrect');
+            setShake(true);
+            setTimeout(() => setShake(false), 500);
+          }
+        }
+      };
+
+      useEffect(() => {
+        window.addEventListener('keypress', handleKeyPress);
+        return () => window.removeEventListener('keypress', handleKeyPress);
+      }, [currentLetter, turn, gameOver, score]);
+
+      const restartGame = () => {
+        setScore(0);
+        setTurn(1);
+        setGameOver(false);
+        setShowConfetti(false);
+        setCurrentLetter(getRandomLetter());
+        if (audioContextRef.current) {
+          audioContextRef.current.resume();
+        }
+      };
+
+      const Confetti = () => {
+        const confettiPieces = Array.from({ length: 60 }, (_, i) => ({
+          id: i,
+          left: Math.random() * 100,
+          delay: Math.random() * 0.3,
+          duration: 1.5 + Math.random() * 0.8,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: 8 + Math.random() * 6
+        }));
+
+        return (
+          <div className="fixed inset-0 pointer-events-none overflow-hidden z-50">
+            {confettiPieces.map(piece => (
+              <div
+                key={piece.id}
+                className="absolute rounded-full"
+                style={{
+                  left: `${piece.left}%`,
+                  top: '-20px',
+                  width: `${piece.size}px`,
+                  height: `${piece.size}px`,
+                  backgroundColor: piece.color,
+                  animation: `fall ${piece.duration}s linear forwards`,
+                  animationDelay: `${piece.delay}s`,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}
+              />
+            ))}
+          </div>
+        );
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-sky-400 via-sky-300 to-sky-100 flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
+          <style>
+            {`
+              @keyframes fall {
+                to {
+                  transform: translateY(110vh) rotate(720deg);
+                  opacity: 0;
+                }
+              }
+              @keyframes float {
+                0%, 100% {
+                  transform: translateY(0px);
+                }
+                50% {
+                  transform: translateY(-25px);
+                }
+              }
+              @keyframes bounce {
+                0%, 100% {
+                  transform: scale(1);
+                }
+                50% {
+                  transform: scale(1.15);
+                }
+              }
+              @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-10px); }
+                75% { transform: translateX(10px); }
+              }
+            `}
+          </style>
+
+          {showConfetti && <Confetti />}
+
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-2 drop-shadow-lg">
+              🎈 Balloon Letter Game 🎈
+            </h1>
+            <p className="text-xl sm:text-2xl text-white drop-shadow-md">Type the letter you see!</p>
+            <div className="flex justify-center gap-4 sm:gap-8 mt-4">
+              <div className="text-2xl sm:text-3xl font-bold text-yellow-300 drop-shadow-md">
+                ⭐ Score: {score}
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold text-white drop-shadow-md">
+                Round: {turn}/7
+              </div>
+            </div>
+          </div>
+
+          <div 
+            className="relative"
+            style={{
+              animation: gameOver ? 'none' : 'float 3s ease-in-out infinite'
+            }}
+          >
+            {!gameOver ? (
+              <>
+                <svg width="220" height="280" viewBox="0 0 250 300" className="sm:w-[250px] sm:h-[300px]">
+                  <defs>
+                    <radialGradient id="balloonGradient" cx="35%" cy="35%">
+                      <stop offset="0%" style={{ stopColor: colors[turn % colors.length], stopOpacity: 1 }} />
+                      <stop offset="100%" style={{ stopColor: colors[(turn + 1) % colors.length], stopOpacity: 0.85 }} />
+                    </radialGradient>
+                    <filter id="shadow">
+                      <feDropShadow dx="0" dy="4" stdDeviation="3" floodOpacity="0.3"/>
+                    </filter>
+                  </defs>
+                  
+                  <ellipse 
+                    cx="125" 
+                    cy="120" 
+                    rx="100" 
+                    ry="120" 
+                    fill="url(#balloonGradient)"
+                    stroke="rgba(255,255,255,0.4)"
+                    strokeWidth="3"
+                    filter="url(#shadow)"
+                  />
+                  
+                  <path
+                    d="M 125 240 Q 125 260 125 280"
+                    stroke={colors[(turn + 2) % colors.length]}
+                    strokeWidth="3"
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                  
+                  <ellipse
+                    cx="125"
+                    cy="95"
+                    rx="35"
+                    ry="40"
+                    fill="rgba(255,255,255,0.35)"
+                  />
+                </svg>
+
+                <div 
+                  className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 select-none"
+                  style={{
+                    animation: showConfetti ? 'bounce 0.5s ease-in-out' : shake ? 'shake 0.5s ease-in-out' : 'none'
+                  }}
+                >
+                  <div className="text-8xl sm:text-9xl font-bold text-white drop-shadow-2xl" style={{ textShadow: '0 4px 8px rgba(0,0,0,0.3)' }}>
+                    {currentLetter}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center bg-white rounded-3xl p-8 sm:p-12 shadow-2xl max-w-md">
+                <h2 className="text-5xl sm:text-6xl font-bold mb-4 sm:mb-6" style={{ color: colors[score % colors.length] }}>
+                  Well Done! 🎉
+                </h2>
+                <p className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-gray-700">
+                  You got {score} out of 7 correct!
+                </p>
+                <div className="text-6xl mb-6">
+                  {score >= 6 ? '🌟🌟🌟' : score >= 4 ? '⭐⭐' : '⭐'}
+                </div>
+                <button
+                  onClick={restartGame}
+                  className="text-2xl sm:text-3xl font-bold text-white px-10 sm:px-12 py-4 sm:py-6 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform"
+                  style={{ backgroundColor: colors[score % colors.length] }}
+                >
+                  Play Again! 🎈
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!gameOver && (
+            <>
+              <div className="mt-8 sm:mt-12 text-center">
+                <div className="bg-white rounded-full px-6 sm:px-8 py-3 sm:py-4 shadow-lg inline-block">
+                  <p className="text-2xl sm:text-3xl font-bold" style={{ color: colors[turn % colors.length] }}>
+                    Press "{currentLetter}" on your keyboard
+                  </p>
+                </div>
+              </div>
+
+              <div className="absolute bottom-4 sm:bottom-8 text-center px-4">
+                <p className="text-base sm:text-lg text-white drop-shadow-md font-medium">
+                  🌟 You're doing great! Keep going! 🌟
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.render(<BalloonAlphabetGame />, document.getElementById('root'));
+  </script>
+</body>
+</html>
